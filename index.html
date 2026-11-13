@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="名片">
+<meta name="theme-color" content="#2563eb">
+<title>名片整理</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#6b7280; --line:#e5e7eb;
+    --accent:#2563eb; --accent-soft:#e8efff; --warn:#fff7e6; --warn-line:#f5c26b; --input:#fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#111318; --card:#1b1e25; --fg:#e8eaee; --muted:#9aa1ad; --line:#2c313b;
+      --accent:#5b8cff; --accent-soft:#1f2a44; --warn:#2e2614; --warn-line:#7a5a1e; --input:#14171d;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px 16px 96px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  h1 { font-size:20px; margin:0; }
+  a { color:var(--accent); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
+  .label { font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .chip { border:1px solid var(--line); background:var(--input); color:var(--fg); border-radius:999px; padding:6px 12px; font-size:14px; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  input[type=text], textarea { width:100%; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font-size:16px; font-family:inherit; background:var(--input); color:var(--fg); }
+  textarea { min-height:60px; resize:vertical; }
+  .shots { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .shot { position:relative; aspect-ratio:1.6; border:2px dashed var(--line); border-radius:12px; display:flex;
+    align-items:center; justify-content:center; color:var(--muted); font-size:14px; overflow:hidden; text-align:center; }
+  .shot img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .shot input { position:absolute; inset:0; opacity:0; z-index:2; }
+  .btn { width:100%; border:0; border-radius:12px; padding:14px; font-size:17px; font-weight:600;
+    background:var(--accent); color:#fff; margin-top:12px; }
+  .btn:disabled { opacity:.45; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .field.wide { grid-column:1 / -1; }
+  .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  .dup { background:var(--warn); border:1px solid var(--warn-line); border-radius:12px; padding:12px; margin-bottom:12px; font-size:14px; }
+  .dup label { display:block; margin-top:6px; }
+  .hidden { display:none !important; }
+  .status { text-align:center; color:var(--muted); font-size:14px; margin-top:8px; min-height:21px; }
+  .toast { position:fixed; left:16px; right:16px; bottom:16px; max-width:528px; margin:0 auto; background:#111827;
+    color:#fff; border-radius:12px; padding:12px 14px; font-size:15px; transform:translateY(160%); transition:transform .25s; }
+  .toast.show { transform:none; }
+  .btn.ghost { background:var(--accent-soft); color:var(--accent); position:relative; display:block; text-align:center; }
+  .btn.ghost input { position:absolute; inset:0; opacity:0; }
+  .log { margin-top:10px; font-size:14px; line-height:1.7; }
+  .log div { border-bottom:1px solid var(--line); padding:4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>名片整理</h1>
+    <a id="sheetLink" href="#" target="_blank">開啟 Sheet ↗</a>
+  </header>
+
+  <section class="card hidden" id="keyCard">
+    <div class="label">第一次使用：請輸入存取碼（只需輸入一次，之後會記住）</div>
+    <input type="text" id="keyIn" placeholder="存取碼" autocomplete="off">
+    <button class="btn" id="keyBtn">確認</button>
+  </section>
+
+  <section class="card">
+    <div class="label">認識場景（會沿用到下一張，展會連拍不用重選）</div>
+    <div class="chips" id="scenes"></div>
+    <input type="text" id="sceneNote" placeholder="場景備註，例：2026 DMA 年會／B 館攤位">
+  </section>
+
+  <section class="card">
+    <div class="label">名片照片</div>
+    <div class="shots">
+      <label class="shot"><span>📷 正面<br>（必拍）</span><img id="img0" class="hidden" alt=""><input type="file" accept="image/*" id="in0"></label>
+      <label class="shot"><span>📷 背面<br>（選拍）</span><img id="img1" class="hidden" alt=""><input type="file" accept="image/*" id="in1"></label>
+    </div>
+    <button class="btn" id="ocrBtn" disabled>辨識名片</button>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card">
+    <div class="label">批次上傳：一次選多張照片，一張照片可以擺好幾張名片，辨識後會直接存入（同一人自動更新）</div>
+    <label class="btn ghost" id="batchBtn">📚 選擇多張照片<input type="file" accept="image/*" multiple id="batchIn"></label>
+    <div class="log" id="batchLog"></div>
+  </section>
+
+  <section class="card hidden" id="result">
+    <div class="dup hidden" id="dup">
+      <div id="dupText"></div>
+      <label><input type="radio" name="mode" value="update" checked> 更新這筆聯絡人（刷新更新時間、加一筆互動紀錄）</label>
+      <label><input type="radio" name="mode" value="new"> 另外新增一筆</label>
+    </div>
+    <div class="label">確認辨識結果（可直接修改）</div>
+    <div class="grid" id="fields"></div>
+    <div class="grid" style="margin-top:10px">
+      <div class="field wide"><label>標籤（以、分隔）</label><input type="text" id="tags" placeholder="例：潛在客戶、代理商"></div>
+      <div class="field wide"><label>備註</label><textarea id="notes" placeholder="聊了什麼、後續要跟進的事"></textarea></div>
+    </div>
+    <button class="btn" id="saveBtn">儲存到 Sheet</button>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+  const FIELDS = [
+    ['name','中文姓名'], ['name_en','英文姓名'], ['title','職稱',1], ['company','公司',1],
+    ['company_en','英文公司名',1], ['department','部門'], ['tax_id','統編'],
+    ['phone','電話'], ['mobile','手機'], ['fax','傳真'], ['line_id','LINE ID'],
+    ['email','Email',1], ['website','網站',1], ['address','地址',1],
+  ];
+  const S = { scene:'', images:[null, null], dup:null };
+  const $ = id => document.getElementById(id);
+
+  // 後端：Apps Script（不帶 Google 登入，避免公司／多帳號衝突）
+  const API = 'https://script.google.com/macros/s/AKfycbx-bcXvTc8LEaK61l6Xia1ueUwYpjCkJfBcK365wlWLsxbUCBFFYHYCGU5gKxPW34M96w/exec';
+  let K = '';
+  try {
+    const m = location.hash.match(/k=([A-Za-z0-9]+)/);
+    if (m) { K = m[1]; history.replaceState(null, '', location.pathname); }
+    if (K) localStorage.setItem('namecardKey', K); else K = localStorage.getItem('namecardKey') || '';
+  } catch (e) {}
+  const ACTION = { getInit: 'init', extractCard: 'extractCard', extractCards: 'extractCards', saveCard: 'saveCard' };
+  async function run(fn, arg) {
+    const body = { k: K, action: ACTION[fn] };
+    if (fn === 'saveCard') body.p = arg; else if (arg) body.images = arg;
+    let res;
+    try { res = await fetch(API, { method: 'POST', body: JSON.stringify(body) }); }
+    catch (e) { throw new Error('連線失敗，請確認網路後再試'); }
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error);
+    return j.data;
+  }
+
+  function toast(msg, ms) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms || 3000);
+  }
+  const errMsg = e => (e && e.message) ? e.message : String(e);
+
+  // 場景選擇
+  function renderScenes(list, last) {
+    if (last && list.indexOf(last) < 0) list = list.concat(last);
+    S.scene = last || '';
+    const box = $('scenes'); box.innerHTML = '';
+    list.forEach(s => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip' + (s === S.scene ? ' on' : ''); b.textContent = s;
+      b.onclick = () => {
+        S.scene = S.scene === s ? '' : s;
+        [...box.children].forEach(c => c.classList.toggle('on', c.textContent === S.scene));
+      };
+      box.appendChild(b);
+    });
+  }
+
+  // 欄位
+  function renderFields() {
+    $('fields').innerHTML = FIELDS.map(([k, label, wide]) =>
+      `<div class="field${wide ? ' wide' : ''}"><label>${label}</label><input type="text" id="f_${k}"></div>`).join('');
+  }
+
+  // 壓縮照片：長邊 1600px、JPEG 0.85，約 200–400 KB
+  function resize(file, maxEdge) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        const s = Math.min(1, (maxEdge || 1600) / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        const d = c.toDataURL('image/jpeg', 0.85);
+        res({ data: d.split(',')[1], mimeType: 'image/jpeg', preview: d });
+      };
+      img.onerror = () => rej(new Error('照片讀取失敗，請重拍'));
+      img.src = url;
+    });
+  }
+
+  [0, 1].forEach(i => {
+    $('in' + i).onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        S.images[i] = await resize(f);
+        $('img' + i).src = S.images[i].preview; $('img' + i).classList.remove('hidden');
+        $('ocrBtn').disabled = !S.images[0];
+      } catch (err) { toast(errMsg(err)); }
+    };
+  });
+
+  const payloadImages = () => S.images.filter(Boolean).map(({ data, mimeType }) => ({ data, mimeType }));
+
+  $('ocrBtn').onclick = async () => {
+    $('ocrBtn').disabled = true; $('status').textContent = '辨識中…約 5–10 秒';
+    try {
+      const r = await run('extractCard', payloadImages());
+      FIELDS.forEach(([k]) => { $('f_' + k).value = (r.card && r.card[k]) || ''; });
+      S.dup = r.duplicate;
+      if (S.dup) {
+        $('dupText').textContent = `⚠️ 已有聯絡人：${S.dup.name || '未命名'}${S.dup.company ? '（' + S.dup.company + '）' : ''}，上次更新 ${S.dup.updated || '—'}`;
+        document.querySelector('input[name=mode][value=update]').checked = true;
+        $('dup').classList.remove('hidden');
+      } else {
+        $('dup').classList.add('hidden');
+      }
+      $('result').classList.remove('hidden');
+      $('status').textContent = '';
+      $('result').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      $('status').textContent = '';
+      toast(errMsg(e), 6000);
+    } finally {
+      $('ocrBtn').disabled = !S.images[0];
+    }
+  };
+
+  $('saveBtn').onclick = async () => {
+    const card = {};
+    FIELDS.forEach(([k]) => { card[k] = $('f_' + k).value.trim(); });
+    if (!card.name && !card.name_en && !card.company) { toast('至少要有姓名或公司'); return; }
+    const mode = S.dup && document.querySelector('input[name=mode]:checked').value === 'update' ? 'update' : 'new';
+    $('saveBtn').disabled = true; $('saveBtn').textContent = '儲存中…';
+    try {
+      const r = await run('saveCard', {
+        card, mode, row: mode === 'update' ? S.dup.row : null,
+        scene: S.scene, sceneNote: $('sceneNote').value.trim(),
+        tags: $('tags').value.trim(), notes: $('notes').value.trim(),
+        images: payloadImages(),
+      });
+      toast(`✅ 已${r.mode}：${r.name}（第 ${r.row} 列）`);
+      reset();
+    } catch (e) {
+      toast(errMsg(e), 6000);
+    } finally {
+      $('saveBtn').disabled = false; $('saveBtn').textContent = '儲存到 Sheet';
+    }
+  };
+
+  function reset() {
+    S.images = [null, null]; S.dup = null;
+    [0, 1].forEach(i => { $('in' + i).value = ''; $('img' + i).classList.add('hidden'); $('img' + i).removeAttribute('src'); });
+    $('tags').value = ''; $('notes').value = '';
+    $('result').classList.add('hidden'); $('ocrBtn').disabled = true;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // 批次：逐張辨識 → 直接存入
+  $('batchIn').onchange = async e => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    const log = $('batchLog'); log.innerHTML = '';
+    $('batchBtn').classList.add('hidden');
+    let added = 0, updated = 0, failed = 0;
+    for (let i = 0; i < files.length; i++) {
+      const line = document.createElement('div');
+      const tag = `${i + 1}/${files.length}`;
+      line.textContent = `${tag} 辨識中…`;
+      log.appendChild(line);
+      try {
+        const img = await resize(files[i], 2400);
+        const one = { data: img.data, mimeType: img.mimeType };
+        const list = await run('extractCards', [one]);
+        if (!list.length) { line.textContent = `${tag} ⚠️ 沒找到名片`; failed++; continue; }
+        const names = [];
+        for (const it of list) {
+          const mode = it.duplicate ? 'update' : 'new';
+          const r = await run('saveCard', {
+            card: it.card, mode, row: it.duplicate ? it.duplicate.row : null,
+            scene: S.scene, sceneNote: $('sceneNote').value.trim(),
+            tags: '', notes: '', images: [one],
+          });
+          names.push(r.name + (mode === 'update' ? '（更新）' : ''));
+          if (mode === 'update') updated++; else added++;
+        }
+        line.textContent = `${tag} ✅ ${names.join('、')}`;
+      } catch (err) {
+        line.textContent = `${tag} ❌ ${errMsg(err)}`;
+        failed++;
+      }
+    }
+    $('batchBtn').classList.remove('hidden');
+    toast(`完成：新增 ${added}、更新 ${updated}${failed ? '、失敗 ' + failed : ''}`, 6000);
+  };
+
+  renderFields();
+  function boot() {
+    run('getInit').then(d => {
+      $('keyCard').classList.add('hidden');
+      renderScenes(d.scenes, d.lastScene);
+      $('sceneNote').value = d.lastSceneNote;
+      $('sheetLink').href = d.sheetUrl;
+    }).catch(e => {
+      if (/存取碼/.test(errMsg(e))) $('keyCard').classList.remove('hidden');
+      toast(errMsg(e), 6000);
+    });
+  }
+  $('keyBtn').onclick = () => {
+    K = $('keyIn').value.trim();
+    try { localStorage.setItem('namecardKey', K); } catch (e) {}
+    boot();
+  };
+  if (!K) $('keyCard').classList.remove('hidden');
+  boot();
+</script>
+</body>
+</html>
